@@ -79,7 +79,17 @@ func (s *Service) Current(ctx context.Context, zipcode string) (Result, error) {
 type location struct {
 	City  string `json:"localidade"`
 	State string `json:"uf"`
-	Error bool   `json:"erro"`
+	// ViaCEP flags unknown zipcodes with "erro", sent as true or as "true".
+	Error json.RawMessage `json:"erro"`
+}
+
+func (l location) notFound() bool {
+	switch string(l.Error) {
+	case "", "null", "false", `"false"`:
+		return l.City == "" || l.State == ""
+	default:
+		return true
+	}
 }
 
 func (s *Service) lookupZipcode(ctx context.Context, zipcode string) (location, error) {
@@ -92,7 +102,7 @@ func (s *Service) lookupZipcode(ctx context.Context, zipcode string) (location, 
 		recordLookupFailure(span)
 		return location{}, err
 	}
-	if result.Error || result.City == "" || result.State == "" {
+	if result.notFound() {
 		span.SetStatus(codes.Error, "zipcode not found")
 		return location{}, ErrZipcodeNotFound
 	}
